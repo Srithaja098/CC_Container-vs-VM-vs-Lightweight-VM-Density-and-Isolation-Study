@@ -1,52 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
                              http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- Project Coordinates -->
     <groupId>org.cloudstudy</groupId>
     <artifactId>cloud-iso-study</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <!-- Project Metadata -->
-    <name>cloud-iso-study</name>
-    <description>Cloud Density and Isolation Simulation using CloudSim</description>
+    <name>CloudSim Isolation Study</name>
+    <description>Container, VM, and lightweight-VM density and isolation experiments</description>
 
-    <!-- Global Properties -->
     <properties>
-        <!-- Java Source and Target versions -->
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-
-        <!-- CloudSim version (installed locally from github.com/Cloudslab/cloudsim) -->
-        <cloudsim.version>7.0.1</cloudsim.version>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
     </properties>
 
     <dependencies>
-        <!-- CloudSim Core Dependency -->
-        <!-- Populated from local build of github.com/Cloudslab/cloudsim or Maven repository -->
+        <!-- CloudSim 4.0 is supplied in lib as specified by the project ground rules. -->
         <dependency>
             <groupId>org.cloudbus.cloudsim</groupId>
             <artifactId>cloudsim</artifactId>
-            <version>${cloudsim.version}</version>
+            <version>4.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/cloudsim-4.0.jar</systemPath>
         </dependency>
-
-        <!-- Apache Commons Math: required by several CloudSim distributions and distributions models -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
             <version>3.6.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/commons-math3-3.6.1.jar</systemPath>
         </dependency>
     </dependencies>
 
     <build>
+        <!-- The shared project sources are currently in the workspace-level src directory. -->
+        <sourceDirectory>${project.basedir}/../src</sourceDirectory>
         <plugins>
-            <!-- Maven Compiler Plugin: Configures javac compiler version -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -54,21 +48,16 @@
                 <configuration>
                     <source>${maven.compiler.source}</source>
                     <target>${maven.compiler.target}</target>
-                    <release>${maven.compiler.release}</release>
                 </configuration>
             </plugin>
-
-            <!-- Exec Maven Plugin: Allows running the application via 'mvn exec:java' -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.1.0</version>
                 <configuration>
-                    <mainClass>org.cloudstudy.Main</mainClass>
+                    <mainClass>isolationstudy.Main</mainClass>
                 </configuration>
             </plugin>
-
-            <!-- Maven JAR Plugin: Configures Main-Class entry in META-INF/MANIFEST.MF -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -77,7 +66,7 @@
                     <archive>
                         <manifest>
                             <addClasspath>true</addClasspath>
-                            <mainClass>org.cloudstudy.Main</mainClass>
+                            <mainClass>isolationstudy.Main</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
