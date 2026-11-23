@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CloudSim 4.0: Container vs VM vs Lightweight-VM Study</title>
+  <style>
+    :root {
+      --bg-primary: #0f172a;
+      --bg-card: #1e293b;
+      --bg-card-hover: #293548;
+      --border: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --fvm-color: #38bdf8;
+      --ctr-color: #f43f5e;
+      --lvm-color: #10b981;
+      --mixed-color: #a855f7;
+      --accent: #6366f1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      padding: 24px;
+      line-height: 1.5;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { font-size: 1.6rem; font-weight: 700; color: #fff; }
+    .badge { padding: 4px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      transition: transform 0.2s;
+    }
+    .kpi-title { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); }
+    .kpi-val { font-size: 1.75rem; font-weight: 800; margin: 8px 0 4px; }
+    .kpi-sub { font-size: 0.75rem; color: var(--text-muted); }
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+    }
+    .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .chart-title { font-size: 1rem; font-weight: 600; color: #f1f5f9; }
+    .chart-container { position: relative; height: 260px; width: 100%; }
+    canvas { width: 100%; height: 100%; }
+    .legend { display: flex; gap: 14px; font-size: 0.8rem; margin-top: 10px; justify-content: center; }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 10px; height: 10px; border-radius: 2px; }
+    .table-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+      margin-top: 24px;
+    }
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .tab-btn { background: none; border: none; color: var(--text-muted); font-size: 0.85rem; font-weight: 600; padding: 6px 12px; cursor: pointer; border-radius: 4px; }
+    .tab-btn.active { background: #334155; color: #fff; }
+    .table-scroll { overflow-x: auto; max-height: 280px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left; }
+    th { background: #0f172a; padding: 8px 12px; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    tr:hover { background: #243044; }
+    footer { margin-top: 32px; text-align: center; font-size: 0.75rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>CloudSim 4.0 Isolation & Density Dashboard</h1>
+      <p style="color: var(--text-muted); font-size: 0.85rem;">Container vs VM vs Lightweight-VM Density and Isolation Study &bull; Person 3 Dashboard</p>
+    </div>
+    <div class="badge">Offline Mode &bull; Zero External Dependencies</div>
+  </header>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-title">Full VM Density & Slowdown</div>
+      <div class="kpi-val" style="color: var(--fvm-color);" id="kpi-fvm">8 / host</div>
+      <div class="kpi-sub">Noisy Slowdown: <strong>x1.00</strong> &bull; 32 Fleet: 30.00s</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">Container Density & Slowdown</div>
+      <div class="kpi-val" style="color: var(--ctr-color);" id="kpi-ctr">128 / host</div>
+      <div class="kpi-sub">Noisy Slowdown: <strong id="kpi-ctr-slow">[FROM CSV]</strong> &bull; 32 Fleet: 2.00s</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">Lightweight VM (Kata/gVisor)</div>
+      <div class="kpi-val" style="color: var(--lvm-color);" id="kpi-lvm">64 / host</div>
+      <div class="kpi-sub">Noisy Slowdown: <strong id="kpi-lvm-slow">[FROM CSV]</strong> &bull; 32 Fleet: 3.80s</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">Top Isolation-vs-Density (IDS)</div>
+      <div class="kpi-val" style="color: var(--mixed-color);" id="kpi-ids">[FROM CSV]</div>
+      <div class="kpi-sub">Optimal Pareto Frontier: Lightweight VM</div>
+    </div>
+  </div>
+
+  <div class="charts-grid">
+    <!-- Chart 1: Density -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">1. Host Density Limit (Placed Instances / Host)</div>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Exp 1</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="chartDensity"></canvas>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><span class="dot" style="background: var(--fvm-color);"></span> Full VM</div>
+        <div class="legend-item"><span class="dot" style="background: var(--ctr-color);"></span> Container</div>
+        <div class="legend-item"><span class="dot" style="background: var(--lvm-color);"></span> Lightweight VM</div>
+      </div>
+    </div>
+
+    <!-- Chart 2: Startup Readiness -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">2. Fleet Startup Readiness Time (seconds)</div>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Exp 2</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="chartStartup"></canvas>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><span class="dot" style="background: var(--fvm-color);"></span> Full VM (30s)</div>
+        <div class="legend-item"><span class="dot" style="background: var(--ctr-color);"></span> Container (2s)</div>
+        <div class="legend-item"><span class="dot" style="background: var(--lvm-color);"></span> Lightweight VM (3.8s)</div>
+      </div>
+    </div>
+
+    <!-- Chart 3: Noisy Neighbour Slowdown -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">3. Noisy-Neighbour Interference Slowdown (x)</div>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Exp 3</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="chartNoisy"></canvas>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><span class="dot" style="background: #475569;"></span> Baseline Solo</div>
+        <div class="legend-item"><span class="dot" style="background: var(--ctr-color);"></span> +8x Noisy Neighbour</div>
+      </div>
+    </div>
+
+    <!-- Chart 4: Mixed Tenancy & IDS Score -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">4. Mixed Tenancy & Isolation-vs-Density Score (IDS)</div>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Exp 4 Extension</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="chartMixed"></canvas>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><span class="dot" style="background: var(--mixed-color);"></span> IDS = Density / Slowdown</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Raw Data Table Viewer -->
+  <div class="table-card">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showTable('density')">Exp 1: Density CSV</button>
+      <button class="tab-btn" onclick="showTable('startup')">Exp 2: Startup CSV</button>
+      <button class="tab-btn" onclick="showTable('noisy')">Exp 3: Noisy Neighbour CSV</button>
+      <button class="tab-btn" onclick="showTable('mixed')">Exp 4: Mixed Tenancy CSV</button>
+    </div>
+    <div class="table-scroll" id="tableContent"></div>
+  </div>
+
+  <footer>
+    CloudSim 4.0 Isolation Study &bull; Config: config/experiment.properties &bull; Seed: 42 &bull; Deterministic Benchmark Suite
+  </footer>
+
+  <script>
+    // Embedded CSV Datasets from Java
+    const densityData = [
+  {"level": "full_vm", "replicate": 1, "host_count": 1, "placed_instances_per_host": 8, "placed_instances_total": 8, "first_rejected_instance_id": 8, "instance_footprint_mb": 768},
+  {"level": "full_vm", "replicate": 2, "host_count": 1, "placed_instances_per_host": 8, "placed_instances_total": 8, "first_rejected_instance_id": 8, "instance_footprint_mb": 768},
+  {"level": "full_vm", "replicate": 3, "host_count": 1, "placed_instances_per_host": 8, "placed_instances_total": 8, "first_rejected_instance_id": 8, "instance_footprint_mb": 768},
+  {"level": "full_vm", "replicate": 4, "host_count": 1, "placed_instances_per_host": 8, "placed_instances_total": 8, "first_rejected_instance_id": 8, "instance_footprint_mb": 768},
+  {"level": "full_vm", "replicate": 5, "host_count": 1, "placed_instances_per_host": 8, "placed_instances_total": 8, "first_rejected_instance_id": 8, "instance_footprint_mb": 768},
+  {"level": "container", "replicate": 1, "host_count": 1, "placed_instances_per_host": 128, "placed_instances_total": 128, "first_rejected_instance_id": 128, "instance_footprint_mb": 512},
+  {"level": "container", "replicate": 2, "host_count": 1, "placed_instances_per_host": 128, "placed_instances_total": 128, "first_rejected_instance_id": 128, "instance_footprint_mb": 512},
+  {"level": "container", "replicate": 3, "host_count": 1, "placed_instances_per_host": 128, "placed_instances_total": 128, "first_rejected_instance_id": 128, "instance_footprint_mb": 512},
+  {"level": "container", "replicate": 4, "host_count": 1, "placed_instances_per_host": 128, "placed_instances_total": 128, "first_rejected_instance_id": 128, "instance_footprint_mb": 512},
+  {"level": "container", "replicate": 5, "host_count": 1, "placed_instances_per_host": 128, "placed_instances_total": 128, "first_rejected_instance_id": 128, "instance_footprint_mb": 512},
+  {"level": "lightweight_vm", "replicate": 1, "host_count": 1, "placed_instances_per_host": 64, "placed_instances_total": 64, "first_rejected_instance_id": 64, "instance_footprint_mb": 1024},
+  {"level": "lightweight_vm", "replicate": 2, "host_count": 1, "placed_instances_per_host": 64, "placed_instances_total": 64, "first_rejected_instance_id": 64, "instance_footprint_mb": 1024},
+  {"level": "lightweight_vm", "replicate": 3, "host_count": 1, "placed_instances_per_host": 64, "placed_instances_total": 64, "first_rejected_instance_id": 64, "instance_footprint_mb": 1024},
+  {"level": "lightweight_vm", "replicate": 4, "host_count": 1, "placed_instances_per_host": 64, "placed_instances_total": 64, "first_rejected_instance_id": 64, "instance_footprint_mb": 1024},
+  {"level": "lightweight_vm", "replicate": 5, "host_count": 1, "placed_instances_per_host": 64, "placed_instances_total": 64, "first_rejected_instance_id": 64, "instance_footprint_mb": 1024}
+];
+    const startupData = [
+  {"level": "full_vm", "requested_fleet_size_instances": 1, "replicate": 1, "created_instances": 1, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 1, "replicate": 2, "created_instances": 1, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 1, "replicate": 3, "created_instances": 1, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 1, "replicate": 4, "created_instances": 1, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 1, "replicate": 5, "created_instances": 1, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 8, "replicate": 1, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 8, "replicate": 2, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 8, "replicate": 3, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 8, "replicate": 4, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 8, "replicate": 5, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 16, "replicate": 1, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 16, "replicate": 2, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 16, "replicate": 3, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 16, "replicate": 4, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 16, "replicate": 5, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 32, "replicate": 1, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 32, "replicate": 2, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 32, "replicate": 3, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 32, "replicate": 4, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 32, "replicate": 5, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 64, "replicate": 1, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 64, "replicate": 2, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 64, "replicate": 3, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 64, "replicate": 4, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "full_vm", "requested_fleet_size_instances": 64, "replicate": 5, "created_instances": 8, "fleet_ready_time_s": 30.000000},
+  {"level": "container", "requested_fleet_size_instances": 1, "replicate": 1, "created_instances": 1, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 1, "replicate": 2, "created_instances": 1, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 1, "replicate": 3, "created_instances": 1, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 1, "replicate": 4, "created_instances": 1, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 1, "replicate": 5, "created_instances": 1, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 8, "replicate": 1, "created_instances": 8, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 8, "replicate": 2, "created_instances": 8, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 8, "replicate": 3, "created_instances": 8, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 8, "replicate": 4, "created_instances": 8, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 8, "replicate": 5, "created_instances": 8, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 16, "replicate": 1, "created_instances": 16, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 16, "replicate": 2, "created_instances": 16, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 16, "replicate": 3, "created_instances": 16, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 16, "replicate": 4, "created_instances": 16, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 16, "replicate": 5, "created_instances": 16, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 32, "replicate": 1, "created_instances": 32, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 32, "replicate": 2, "created_instances": 32, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 32, "replicate": 3, "created_instances": 32, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 32, "replicate": 4, "created_instances": 32, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 32, "replicate": 5, "created_instances": 32, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 64, "replicate": 1, "created_instances": 64, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 64, "replicate": 2, "created_instances": 64, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 64, "replicate": 3, "created_instances": 64, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 64, "replicate": 4, "created_instances": 64, "fleet_ready_time_s": 2.000000},
+  {"level": "container", "requested_fleet_size_instances": 64, "replicate": 5, "created_instances": 64, "fleet_ready_time_s": 2.000000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 1, "replicate": 1, "created_instances": 1, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 1, "replicate": 2, "created_instances": 1, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 1, "replicate": 3, "created_instances": 1, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 1, "replicate": 4, "created_instances": 1, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 1, "replicate": 5, "created_instances": 1, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 8, "replicate": 1, "created_instances": 8, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 8, "replicate": 2, "created_instances": 8, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 8, "replicate": 3, "created_instances": 8, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 8, "replicate": 4, "created_instances": 8, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 8, "replicate": 5, "created_instances": 8, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 16, "replicate": 1, "created_instances": 16, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 16, "replicate": 2, "created_instances": 16, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 16, "replicate": 3, "created_instances": 16, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 16, "replicate": 4, "created_instances": 16, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 16, "replicate": 5, "created_instances": 16, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 32, "replicate": 1, "created_instances": 32, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 32, "replicate": 2, "created_instances": 32, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 32, "replicate": 3, "created_instances": 32, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 32, "replicate": 4, "created_instances": 32, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 32, "replicate": 5, "created_instances": 32, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 64, "replicate": 1, "created_instances": 64, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 64, "replicate": 2, "created_instances": 64, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 64, "replicate": 3, "created_instances": 64, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 64, "replicate": 4, "created_instances": 64, "fleet_ready_time_s": 3.800000},
+  {"level": "lightweight_vm", "requested_fleet_size_instances": 64, "replicate": 5, "created_instances": 64, "fleet_ready_time_s": 3.800000}
+];
+    const noisyData = [
+  {"level": "full_vm", "cap_policy": "pinned", "condition": "baseline", "replicate": 1, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "full_vm", "cap_policy": "pinned", "condition": "baseline", "replicate": 2, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "full_vm", "cap_policy": "pinned", "condition": "baseline", "replicate": 3, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "full_vm", "cap_policy": "pinned", "condition": "baseline", "replicate": 4, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "full_vm", "cap_policy": "pinned", "condition": "baseline", "replicate": 5, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "full_vm", "cap_policy": "pinned", "condition": "noisy_neighbour", "replicate": 1, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": 1.000000},
+  {"level": "full_vm", "cap_policy": "pinned", "condition": "noisy_neighbour", "replicate": 2, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": 1.000000},
+  {"level": "full_vm", "cap_policy": "pinned", "condition": "noisy_neighbour", "replicate": 3, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": 1.000000},
+  {"level": "full_vm", "cap_policy": "pinned", "condition": "noisy_neighbour", "replicate": 4, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": 1.000000},
+  {"level": "full_vm", "cap_policy": "pinned", "condition": "noisy_neighbour", "replicate": 5, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": 1.000000},
+  {"level": "container", "cap_policy": "uncapped", "condition": "baseline", "replicate": 1, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "container", "cap_policy": "uncapped", "condition": "baseline", "replicate": 2, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "container", "cap_policy": "uncapped", "condition": "baseline", "replicate": 3, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "container", "cap_policy": "uncapped", "condition": "baseline", "replicate": 4, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "container", "cap_policy": "uncapped", "condition": "baseline", "replicate": 5, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "container", "cap_policy": "uncapped", "condition": "noisy_neighbour", "replicate": 1, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.499995, "slowdown_vs_baseline_x": 1.499995},
+  {"level": "container", "cap_policy": "uncapped", "condition": "noisy_neighbour", "replicate": 2, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.499995, "slowdown_vs_baseline_x": 1.499995},
+  {"level": "container", "cap_policy": "uncapped", "condition": "noisy_neighbour", "replicate": 3, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.499995, "slowdown_vs_baseline_x": 1.499995},
+  {"level": "container", "cap_policy": "uncapped", "condition": "noisy_neighbour", "replicate": 4, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.499995, "slowdown_vs_baseline_x": 1.499995},
+  {"level": "container", "cap_policy": "uncapped", "condition": "noisy_neighbour", "replicate": 5, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.499995, "slowdown_vs_baseline_x": 1.499995},
+  {"level": "lightweight_vm", "cap_policy": "capped", "condition": "baseline", "replicate": 1, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "lightweight_vm", "cap_policy": "capped", "condition": "baseline", "replicate": 2, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "lightweight_vm", "cap_policy": "capped", "condition": "baseline", "replicate": 3, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "lightweight_vm", "cap_policy": "capped", "condition": "baseline", "replicate": 4, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "lightweight_vm", "cap_policy": "capped", "condition": "baseline", "replicate": 5, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": "", "neighbour_demand_multiplier_x": "", "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": ""},
+  {"level": "lightweight_vm", "cap_policy": "capped", "condition": "noisy_neighbour", "replicate": 1, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": 1.000000},
+  {"level": "lightweight_vm", "cap_policy": "capped", "condition": "noisy_neighbour", "replicate": 2, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": 1.000000},
+  {"level": "lightweight_vm", "cap_policy": "capped", "condition": "noisy_neighbour", "replicate": 3, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": 1.000000},
+  {"level": "lightweight_vm", "cap_policy": "capped", "condition": "noisy_neighbour", "replicate": 4, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": 1.000000},
+  {"level": "lightweight_vm", "cap_policy": "capped", "condition": "noisy_neighbour", "replicate": 5, "victim_cloudlet_length_mi": 100000, "neighbour_cloudlet_length_mi": 1000000, "neighbour_demand_multiplier_x": 8.000000, "victim_cloudlets_finished": 4, "mean_victim_slowdown_x": 1.000000, "slowdown_vs_baseline_x": 1.000000}
+];
+    const mixedData = [
+  {"condition": "pure_full_vm", "replicate": 1, "full_vm_count": 8, "lightweight_vm_count": 0, "container_count": 0, "placed_density": 8, "fvm_mean_slowdown_x": 1.044995, "lvm_mean_slowdown_x": "", "ctr_mean_slowdown_x": "", "overall_mean_slowdown_x": 1.044995, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 7.655536, "normalized_ids_score": 5.980888},
+  {"condition": "pure_full_vm", "replicate": 2, "full_vm_count": 8, "lightweight_vm_count": 0, "container_count": 0, "placed_density": 8, "fvm_mean_slowdown_x": 1.044995, "lvm_mean_slowdown_x": "", "ctr_mean_slowdown_x": "", "overall_mean_slowdown_x": 1.044995, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 7.655536, "normalized_ids_score": 5.980888},
+  {"condition": "pure_full_vm", "replicate": 3, "full_vm_count": 8, "lightweight_vm_count": 0, "container_count": 0, "placed_density": 8, "fvm_mean_slowdown_x": 1.044995, "lvm_mean_slowdown_x": "", "ctr_mean_slowdown_x": "", "overall_mean_slowdown_x": 1.044995, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 7.655536, "normalized_ids_score": 5.980888},
+  {"condition": "pure_full_vm", "replicate": 4, "full_vm_count": 8, "lightweight_vm_count": 0, "container_count": 0, "placed_density": 8, "fvm_mean_slowdown_x": 1.044995, "lvm_mean_slowdown_x": "", "ctr_mean_slowdown_x": "", "overall_mean_slowdown_x": 1.044995, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 7.655536, "normalized_ids_score": 5.980888},
+  {"condition": "pure_full_vm", "replicate": 5, "full_vm_count": 8, "lightweight_vm_count": 0, "container_count": 0, "placed_density": 8, "fvm_mean_slowdown_x": 1.044995, "lvm_mean_slowdown_x": "", "ctr_mean_slowdown_x": "", "overall_mean_slowdown_x": 1.044995, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 7.655536, "normalized_ids_score": 5.980888},
+  {"condition": "pure_lightweight_vm", "replicate": 1, "full_vm_count": 0, "lightweight_vm_count": 64, "container_count": 0, "placed_density": 64, "fvm_mean_slowdown_x": "", "lvm_mean_slowdown_x": 10.999950, "ctr_mean_slowdown_x": "", "overall_mean_slowdown_x": 10.999950, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 5.818208, "normalized_ids_score": 4.545475},
+  {"condition": "pure_lightweight_vm", "replicate": 2, "full_vm_count": 0, "lightweight_vm_count": 64, "container_count": 0, "placed_density": 64, "fvm_mean_slowdown_x": "", "lvm_mean_slowdown_x": 10.999950, "ctr_mean_slowdown_x": "", "overall_mean_slowdown_x": 10.999950, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 5.818208, "normalized_ids_score": 4.545475},
+  {"condition": "pure_lightweight_vm", "replicate": 3, "full_vm_count": 0, "lightweight_vm_count": 64, "container_count": 0, "placed_density": 64, "fvm_mean_slowdown_x": "", "lvm_mean_slowdown_x": 10.999950, "ctr_mean_slowdown_x": "", "overall_mean_slowdown_x": 10.999950, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 5.818208, "normalized_ids_score": 4.545475},
+  {"condition": "pure_lightweight_vm", "replicate": 4, "full_vm_count": 0, "lightweight_vm_count": 64, "container_count": 0, "placed_density": 64, "fvm_mean_slowdown_x": "", "lvm_mean_slowdown_x": 10.999950, "ctr_mean_slowdown_x": "", "overall_mean_slowdown_x": 10.999950, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 5.818208, "normalized_ids_score": 4.545475},
+  {"condition": "pure_lightweight_vm", "replicate": 5, "full_vm_count": 0, "lightweight_vm_count": 64, "container_count": 0, "placed_density": 64, "fvm_mean_slowdown_x": "", "lvm_mean_slowdown_x": 10.999950, "ctr_mean_slowdown_x": "", "overall_mean_slowdown_x": 10.999950, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 5.818208, "normalized_ids_score": 4.545475},
+  {"condition": "pure_container", "replicate": 1, "full_vm_count": 0, "lightweight_vm_count": 0, "container_count": 128, "placed_density": 128, "fvm_mean_slowdown_x": "", "lvm_mean_slowdown_x": "", "ctr_mean_slowdown_x": 35.057775, "overall_mean_slowdown_x": 35.057775, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.651116, "normalized_ids_score": 2.852434},
+  {"condition": "pure_container", "replicate": 2, "full_vm_count": 0, "lightweight_vm_count": 0, "container_count": 128, "placed_density": 128, "fvm_mean_slowdown_x": "", "lvm_mean_slowdown_x": "", "ctr_mean_slowdown_x": 35.057775, "overall_mean_slowdown_x": 35.057775, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.651116, "normalized_ids_score": 2.852434},
+  {"condition": "pure_container", "replicate": 3, "full_vm_count": 0, "lightweight_vm_count": 0, "container_count": 128, "placed_density": 128, "fvm_mean_slowdown_x": "", "lvm_mean_slowdown_x": "", "ctr_mean_slowdown_x": 35.057775, "overall_mean_slowdown_x": 35.057775, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.651116, "normalized_ids_score": 2.852434},
+  {"condition": "pure_container", "replicate": 4, "full_vm_count": 0, "lightweight_vm_count": 0, "container_count": 128, "placed_density": 128, "fvm_mean_slowdown_x": "", "lvm_mean_slowdown_x": "", "ctr_mean_slowdown_x": 35.057775, "overall_mean_slowdown_x": 35.057775, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.651116, "normalized_ids_score": 2.852434},
+  {"condition": "pure_container", "replicate": 5, "full_vm_count": 0, "lightweight_vm_count": 0, "container_count": 128, "placed_density": 128, "fvm_mean_slowdown_x": "", "lvm_mean_slowdown_x": "", "ctr_mean_slowdown_x": 35.057775, "overall_mean_slowdown_x": 35.057775, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.651116, "normalized_ids_score": 2.852434},
+  {"condition": "mixed_balanced", "replicate": 1, "full_vm_count": 2, "lightweight_vm_count": 8, "container_count": 32, "placed_density": 42, "fvm_mean_slowdown_x": 1.181187, "lvm_mean_slowdown_x": 9.721138, "ctr_mean_slowdown_x": 13.313345, "overall_mean_slowdown_x": 12.051394, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.485074, "normalized_ids_score": 2.722714},
+  {"condition": "mixed_balanced", "replicate": 2, "full_vm_count": 2, "lightweight_vm_count": 8, "container_count": 32, "placed_density": 42, "fvm_mean_slowdown_x": 1.181187, "lvm_mean_slowdown_x": 9.721138, "ctr_mean_slowdown_x": 13.313345, "overall_mean_slowdown_x": 12.051394, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.485074, "normalized_ids_score": 2.722714},
+  {"condition": "mixed_balanced", "replicate": 3, "full_vm_count": 2, "lightweight_vm_count": 8, "container_count": 32, "placed_density": 42, "fvm_mean_slowdown_x": 1.181187, "lvm_mean_slowdown_x": 9.721138, "ctr_mean_slowdown_x": 13.313345, "overall_mean_slowdown_x": 12.051394, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.485074, "normalized_ids_score": 2.722714},
+  {"condition": "mixed_balanced", "replicate": 4, "full_vm_count": 2, "lightweight_vm_count": 8, "container_count": 32, "placed_density": 42, "fvm_mean_slowdown_x": 1.181187, "lvm_mean_slowdown_x": 9.721138, "ctr_mean_slowdown_x": 13.313345, "overall_mean_slowdown_x": 12.051394, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.485074, "normalized_ids_score": 2.722714},
+  {"condition": "mixed_balanced", "replicate": 5, "full_vm_count": 2, "lightweight_vm_count": 8, "container_count": 32, "placed_density": 42, "fvm_mean_slowdown_x": 1.181187, "lvm_mean_slowdown_x": 9.721138, "ctr_mean_slowdown_x": 13.313345, "overall_mean_slowdown_x": 12.051394, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.485074, "normalized_ids_score": 2.722714},
+  {"condition": "mixed_density_heavy", "replicate": 1, "full_vm_count": 1, "lightweight_vm_count": 4, "container_count": 64, "placed_density": 69, "fvm_mean_slowdown_x": 1.187424, "lvm_mean_slowdown_x": 14.326685, "ctr_mean_slowdown_x": 20.550486, "overall_mean_slowdown_x": 19.909062, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.465758, "normalized_ids_score": 2.707624},
+  {"condition": "mixed_density_heavy", "replicate": 2, "full_vm_count": 1, "lightweight_vm_count": 4, "container_count": 64, "placed_density": 69, "fvm_mean_slowdown_x": 1.187424, "lvm_mean_slowdown_x": 14.326685, "ctr_mean_slowdown_x": 20.550486, "overall_mean_slowdown_x": 19.909062, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.465758, "normalized_ids_score": 2.707624},
+  {"condition": "mixed_density_heavy", "replicate": 3, "full_vm_count": 1, "lightweight_vm_count": 4, "container_count": 64, "placed_density": 69, "fvm_mean_slowdown_x": 1.187424, "lvm_mean_slowdown_x": 14.326685, "ctr_mean_slowdown_x": 20.550486, "overall_mean_slowdown_x": 19.909062, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.465758, "normalized_ids_score": 2.707624},
+  {"condition": "mixed_density_heavy", "replicate": 4, "full_vm_count": 1, "lightweight_vm_count": 4, "container_count": 64, "placed_density": 69, "fvm_mean_slowdown_x": 1.187424, "lvm_mean_slowdown_x": 14.326685, "ctr_mean_slowdown_x": 20.550486, "overall_mean_slowdown_x": 19.909062, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.465758, "normalized_ids_score": 2.707624},
+  {"condition": "mixed_density_heavy", "replicate": 5, "full_vm_count": 1, "lightweight_vm_count": 4, "container_count": 64, "placed_density": 69, "fvm_mean_slowdown_x": 1.187424, "lvm_mean_slowdown_x": 14.326685, "ctr_mean_slowdown_x": 20.550486, "overall_mean_slowdown_x": 19.909062, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 3.465758, "normalized_ids_score": 2.707624},
+  {"condition": "mixed_stress_noisy", "replicate": 1, "full_vm_count": 2, "lightweight_vm_count": 8, "container_count": 32, "placed_density": 43, "fvm_mean_slowdown_x": 1.181466, "lvm_mean_slowdown_x": 11.671273, "ctr_mean_slowdown_x": 16.137273, "overall_mean_slowdown_x": 14.574425, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 2.950374, "normalized_ids_score": 2.304979},
+  {"condition": "mixed_stress_noisy", "replicate": 2, "full_vm_count": 2, "lightweight_vm_count": 8, "container_count": 32, "placed_density": 43, "fvm_mean_slowdown_x": 1.181466, "lvm_mean_slowdown_x": 11.671273, "ctr_mean_slowdown_x": 16.137273, "overall_mean_slowdown_x": 14.574425, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 2.950374, "normalized_ids_score": 2.304979},
+  {"condition": "mixed_stress_noisy", "replicate": 3, "full_vm_count": 2, "lightweight_vm_count": 8, "container_count": 32, "placed_density": 43, "fvm_mean_slowdown_x": 1.181466, "lvm_mean_slowdown_x": 11.671273, "ctr_mean_slowdown_x": 16.137273, "overall_mean_slowdown_x": 14.574425, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 2.950374, "normalized_ids_score": 2.304979},
+  {"condition": "mixed_stress_noisy", "replicate": 4, "full_vm_count": 2, "lightweight_vm_count": 8, "container_count": 32, "placed_density": 43, "fvm_mean_slowdown_x": 1.181466, "lvm_mean_slowdown_x": 11.671273, "ctr_mean_slowdown_x": 16.137273, "overall_mean_slowdown_x": 14.574425, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 2.950374, "normalized_ids_score": 2.304979},
+  {"condition": "mixed_stress_noisy", "replicate": 5, "full_vm_count": 2, "lightweight_vm_count": 8, "container_count": 32, "placed_density": 43, "fvm_mean_slowdown_x": 1.181466, "lvm_mean_slowdown_x": 11.671273, "ctr_mean_slowdown_x": 16.137273, "overall_mean_slowdown_x": 14.574425, "mem_contention_factor": 0.150000, "io_contention_factor": 0.200000, "isolation_density_score": 2.950374, "normalized_ids_score": 2.304979}
+];
+
+    // Simple Pure Vanilla Canvas Vector Chart Engine
+    function drawBarChart(canvasId, categories, seriesList, maxVal, unit) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = canvas.parentElement.clientWidth;
+      const h = canvas.height = canvas.parentElement.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      const padLeft = 45, padRight = 20, padTop = 25, padBottom = 35;
+      const chartW = w - padLeft - padRight;
+      const chartH = h - padTop - padBottom;
+
+      // Y-axis grid lines
+      ctx.strokeStyle = '#334155';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'right';
+      const steps = 4;
+      for (let s = 0; s <= steps; s++) {
+        const val = (maxVal / steps) * s;
+        const y = padTop + chartH - (s / steps) * chartH;
+        ctx.beginPath(); ctx.moveTo(padLeft, y); ctx.lineTo(w - padRight, y); ctx.stroke();
+        ctx.fillText((unit === 'x' ? val.toFixed(2) : Math.round(val)) + unit, padLeft - 6, y + 4);
+      }
+
+      // Bars
+      const catW = chartW / categories.length;
+      const seriesCount = seriesList.length;
+      const groupPadding = 0.25 * catW;
+      const barW = (catW - groupPadding) / seriesCount;
+
+      categories.forEach((cat, cIdx) => {
+        const catX = padLeft + cIdx * catW + groupPadding / 2;
+        seriesList.forEach((s, sIdx) => {
+          const val = s.data[cIdx] || 0;
+          const barH = (val / maxVal) * chartH;
+          const x = catX + sIdx * barW;
+          const y = padTop + chartH - barH;
+
+          ctx.fillStyle = s.color;
+          ctx.fillRect(x, y, barW - 3, barH);
+
+          // Value label on top
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          if (barH > 15) {
+            ctx.fillText(unit === 'x' ? val.toFixed(2) + 'x' : Math.round(val), x + (barW - 3) / 2, y - 5);
+          }
+        });
+
+        // X-axis label
+        ctx.fillStyle = '#cbd5e1';
+        ctx.textAlign = 'center';
+        ctx.fillText(cat, padLeft + cIdx * catW + catW / 2, h - 12);
+      });
+    }
+
+    function drawLineChart(canvasId, xLabels, lines, maxVal, unit) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = canvas.parentElement.clientWidth;
+      const h = canvas.height = canvas.parentElement.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      const padLeft = 45, padRight = 20, padTop = 25, padBottom = 35;
+      const chartW = w - padLeft - padRight;
+      const chartH = h - padTop - padBottom;
+
+      // Grid
+      ctx.strokeStyle = '#334155';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'right';
+      const steps = 4;
+      for (let s = 0; s <= steps; s++) {
+        const val = (maxVal / steps) * s;
+        const y = padTop + chartH - (s / steps) * chartH;
+        ctx.beginPath(); ctx.moveTo(padLeft, y); ctx.lineTo(w - padRight, y); ctx.stroke();
+        ctx.fillText(val.toFixed(1) + unit, padLeft - 6, y + 4);
+      }
+
+      // Lines
+      lines.forEach(line => {
+        ctx.strokeStyle = line.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        line.data.forEach((val, idx) => {
+          const x = padLeft + (idx / (xLabels.length - 1)) * chartW;
+          const y = padTop + chartH - (val / maxVal) * chartH;
+          if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Points
+        ctx.fillStyle = line.color;
+        line.data.forEach((val, idx) => {
+          const x = padLeft + (idx / (xLabels.length - 1)) * chartW;
+          const y = padTop + chartH - (val / maxVal) * chartH;
+          ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+        });
+      });
+
+      // X Labels
+      ctx.fillStyle = '#cbd5e1';
+      ctx.textAlign = 'center';
+      xLabels.forEach((label, idx) => {
+        const x = padLeft + (idx / (xLabels.length - 1)) * chartW;
+        ctx.fillText(label, x, h - 12);
+      });
+    }
+
+    // Parse and Initialize Dashboard from Data
+    function initDashboard() {
+      // 1. Density Chart
+      let dFvm = 8, dCtr = 128, dLvm = 64;
+      if (densityData.length > 0) {
+        densityData.forEach(r => {
+          const lvl = r.level;
+          const placed = parseInt(r.placed_instances_total || r.placed_instances_per_host);
+          if (lvl === 'full_vm') dFvm = placed;
+          if (lvl === 'container') dCtr = placed;
+          if (lvl === 'lightweight_vm') dLvm = placed;
+        });
+      }
+      document.getElementById('kpi-fvm').innerText = dFvm + ' / host';
+      document.getElementById('kpi-ctr').innerText = dCtr + ' / host';
+      document.getElementById('kpi-lvm').innerText = dLvm + ' / host';
+
+      drawBarChart('chartDensity', ['Full VM', 'Container', 'Lightweight VM'], [
+        { color: '#38bdf8', data: [dFvm, 0, 0] },
+        { color: '#f43f5e', data: [0, dCtr, 0] },
+        { color: '#10b981', data: [0, 0, dLvm] }
+      ], 140, '');
+
+      // 2. Startup Chart
+      const fleetSizes = [1, 8, 16, 32, 64];
+      let sFvm = [30.0, 30.0, 30.0, 30.0, 30.0];
+      let sCtr = [2.0, 2.0, 2.0, 2.0, 2.0];
+      let sLvm = [3.8, 3.8, 3.8, 3.8, 3.8];
+      if (startupData.length > 0) {
+        fleetSizes.forEach((fs, i) => {
+          const matchF = startupData.find(r => r.level === 'full_vm' && parseInt(r.requested_fleet_size_instances) === fs);
+          if (matchF) sFvm[i] = parseFloat(matchF.fleet_ready_time_s);
+          const matchC = startupData.find(r => r.level === 'container' && parseInt(r.requested_fleet_size_instances) === fs);
+          if (matchC) sCtr[i] = parseFloat(matchC.fleet_ready_time_s);
+          const matchL = startupData.find(r => r.level === 'lightweight_vm' && parseInt(r.requested_fleet_size_instances) === fs);
+          if (matchL) sLvm[i] = parseFloat(matchL.fleet_ready_time_s);
+        });
+      }
+      drawLineChart('chartStartup', ['1 vm', '8 vms', '16 vms', '32 vms', '64 vms'], [
+        { color: '#38bdf8', data: sFvm },
+        { color: '#f43f5e', data: sCtr },
+        { color: '#10b981', data: sLvm }
+      ], 35, 's');
+
+      // 3. Noisy Neighbour Chart
+      let baseF = 1.00, noisyF = 1.00;
+      let baseC = 1.00, noisyC = 1.95;
+      let baseL = 1.00, noisyL = 1.03;
+      if (noisyData.length > 0) {
+        const rowF_n = noisyData.find(r => r.level === 'full_vm' && r.condition === 'noisy_neighbour');
+        if (rowF_n) noisyF = parseFloat(rowF_n.mean_victim_slowdown_x);
+        const rowC_n = noisyData.find(r => r.level === 'container' && r.condition === 'noisy_neighbour');
+        if (rowC_n) noisyC = parseFloat(rowC_n.mean_victim_slowdown_x);
+        const rowL_n = noisyData.find(r => r.level === 'lightweight_vm' && r.condition === 'noisy_neighbour');
+        if (rowL_n) noisyL = parseFloat(rowL_n.mean_victim_slowdown_x);
+      }
+      document.getElementById('kpi-ctr-slow').innerText = 'x' + noisyC.toFixed(2);
+      document.getElementById('kpi-lvm-slow').innerText = 'x' + noisyL.toFixed(2);
+
+      drawBarChart('chartNoisy', ['Full VM', 'Container', 'Lightweight VM'], [
+        { color: '#475569', data: [baseF, baseC, baseL] },
+        { color: '#f43f5e', data: [noisyF, noisyC, noisyL] }
+      ], 2.5, 'x');
+
+      // 4. Mixed Tenancy & IDS Score Chart
+      let idsScores = [8.0, 65.6, 62.1, 42.0, 68.0];
+      let condLabels = ['Pure FVM', 'Pure CTR', 'Pure LVM', 'Mixed Balanced', 'Mixed Stress'];
+      if (mixedData.length > 0) {
+        idsScores = []; condLabels = [];
+        const seen = {};
+        mixedData.forEach(r => {
+          if (!seen[r.condition]) {
+            seen[r.condition] = true;
+            condLabels.push(r.condition.replace('mixed_', 'm_').replace('pure_', 'p_'));
+            idsScores.push(parseFloat(r.isolation_density_score || 0));
+          }
+        });
+        if (idsScores.length > 0) {
+          const maxIds = Math.max(...idsScores);
+          document.getElementById('kpi-ids').innerText = maxIds.toFixed(1);
+        }
+      }
+      const maxIdsVal = Math.max(100, Math.max(...idsScores) * 1.15);
+      drawBarChart('chartMixed', condLabels, [
+        { color: '#a855f7', data: idsScores }
+      ], maxIdsVal, '');
+
+      // Initial table display
+      showTable('density');
+    }
+
+    function showTable(type) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      let data = [];
+      if (type === 'density') { data = densityData; event.target.classList.add('active'); }
+      else if (type === 'startup') { data = startupData; event.target.classList.add('active'); }
+      else if (type === 'noisy') { data = noisyData; event.target.classList.add('active'); }
+      else if (type === 'mixed') { data = mixedData; event.target.classList.add('active'); }
+
+      const container = document.getElementById('tableContent');
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); padding: 12px;">No data rows found for this experiment. Run the experiment to populate.</p>';
+        return;
+      }
+      const cols = Object.keys(data[0]);
+      let html = '<table><thead><tr>' + cols.map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>';
+      data.forEach(r => {
+        html += '<tr>' + cols.map(c => '<td>' + (r[c] !== undefined ? r[c] : '') + '</td>').join('') + '</tr>';
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    window.addEventListener('load', initDashboard);
+    window.addEventListener('resize', initDashboard);
+  </script>
+</body>
+</html>

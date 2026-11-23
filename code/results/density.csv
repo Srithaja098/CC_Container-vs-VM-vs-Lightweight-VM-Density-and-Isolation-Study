@@ -1,0 +1,16 @@
+level,replicate,host_count,placed_instances_per_host,placed_instances_total,first_rejected_instance_id,instance_footprint_mb
+full_vm,1,1,8,8,8,768
+full_vm,2,1,8,8,8,768
+full_vm,3,1,8,8,8,768
+full_vm,4,1,8,8,8,768
+full_vm,5,1,8,8,8,768
+container,1,1,128,128,128,512
+container,2,1,128,128,128,512
+container,3,1,128,128,128,512
+container,4,1,128,128,128,512
+container,5,1,128,128,128,512
+lightweight_vm,1,1,64,64,64,1024
+lightweight_vm,2,1,64,64,64,1024
+lightweight_vm,3,1,64,64,64,1024
+lightweight_vm,4,1,64,64,64,1024
+lightweight_vm,5,1,64,64,64,1024
