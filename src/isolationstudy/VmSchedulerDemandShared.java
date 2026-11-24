@@ -54,6 +54,7 @@ public class VmSchedulerDemandShared extends VmScheduler {
     private final Map<String, IsolatedVm> instances = new LinkedHashMap<String, IsolatedVm>();
     private int pinnedPesInUse = 0;
     private double shareFactor = 1.0;
+    private double busyMips = 0.0;
 
     public VmSchedulerDemandShared(List<? extends Pe> peList) {
         super(peList);
@@ -135,6 +136,7 @@ public class VmSchedulerDemandShared extends VmScheduler {
         instances.clear();
         pinnedPesInUse = 0;
         shareFactor = 1.0;
+        busyMips = 0.0;
         setAvailableMips(PeList.getTotalMips(getPeList()));
     }
 
@@ -161,6 +163,17 @@ public class VmSchedulerDemandShared extends VmScheduler {
             totalDemand += d;
         }
         shareFactor = (totalDemand > pool && totalDemand > 0.0) ? pool / totalDemand : 1.0;
+
+        // CPU the host really burns (for the energy model): pinned cores that run a job, plus all
+        // that is granted from the shared pool. Grants include virtualisation overhead and a noisy
+        // neighbour's spinning, which is why they are not reduced to the 'useful' part.
+        double pinnedBusy = 0.0;
+        for (IsolatedVm vm : instances.values()) {
+            if (vm.getCapPolicy() == CapPolicy.PINNED) {
+                pinnedBusy += busyVcpus(vm) * vm.getMips();
+            }
+        }
+        busyMips = pinnedBusy + Math.min(totalDemand, pool);
 
         Map<String, List<Double>> grants = getMipsMap();
         grants.clear();
@@ -227,6 +240,14 @@ public class VmSchedulerDemandShared extends VmScheduler {
 
     public int getPinnedPesInUse() {
         return pinnedPesInUse;
+    }
+
+    /**
+     * MIPS the host CPU is burning as of the last recompute: busy pinned vCPUs plus the granted
+     * part of the shared pool. Never above the host's total MIPS.
+     */
+    public double getBusyMips() {
+        return busyMips;
     }
 
     @Override

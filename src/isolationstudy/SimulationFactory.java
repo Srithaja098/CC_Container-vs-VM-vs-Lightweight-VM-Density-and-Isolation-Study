@@ -27,6 +27,13 @@ import org.cloudbus.cloudsim.provisioners.PeProvisionerSimple;
  */
 public final class SimulationFactory {
 
+    /**
+     * Smallest gap CloudSim enforces between events, seconds. The CloudSim default of 0.1 s would
+     * delay the recorded finish of short requests (a 500 MI request runs about 0.2 s), so it is
+     * set to one microsecond. Event times then match the exact finish times.
+     */
+    public static final double MIN_EVENT_GAP_S = 1e-6;
+
     private SimulationFactory() { }
 
     /** Scenario with hosts, datacenter and broker, and no instances. */
@@ -37,7 +44,7 @@ public final class SimulationFactory {
             // keeps runs identical whatever the wall clock says.
             Calendar cal = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
             cal.setTimeInMillis(0L);
-            CloudSim.init(1, cal, false);
+            CloudSim.init(1, cal, false, MIN_EVENT_GAP_S);
 
             IsolationProfile profile = IsolationProfile.of(level, cfg);
 
