@@ -86,11 +86,11 @@ public final class SweepRunner {
 
     /**
      * CLI entry point for standalone sweeps.
-     * Usage: SweepRunner &lt;exp 1|2|3|4&gt; &lt;param&gt; &lt;min&gt; &lt;max&gt; &lt;step&gt;
+     * Usage: SweepRunner &lt;exp 1|2|3|4|5|6&gt; &lt;param&gt; &lt;min&gt; &lt;max&gt; &lt;step&gt;
      */
     public static void main(String[] args) {
         if (args.length < 5) {
-            System.out.println("Usage: java isolationstudy.SweepRunner <1|2|3|4> <paramName> <min> <max> <step> [configPath]");
+            System.out.println("Usage: java isolationstudy.SweepRunner <1|2|3|4|5|6> <paramName> <min> <max> <step> [configPath]");
             System.out.println("Example: java isolationstudy.SweepRunner 1 host.ram_mb 16384 65536 8192");
             System.out.println("Example: java isolationstudy.SweepRunner 3 workload.neighbour_intensity 1.0 16.0 2.0");
             System.exit(1);
@@ -111,6 +111,8 @@ public final class SweepRunner {
                 case 2: exp = new Exp2_Startup(); break;
                 case 3: exp = new Exp3_NoisyNeighbour(); break;
                 case 4: exp = new Exp4_MixedTenancy(); break;
+                case 5: exp = new Exp5_Energy(); break;
+                case 6: exp = new Exp6_Latency(); break;
                 default:
                     System.err.println("Unknown experiment number: " + expNum);
                     System.exit(1);
