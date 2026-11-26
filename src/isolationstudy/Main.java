@@ -12,7 +12,7 @@ import java.util.Scanner;
  *
  * <p>Supports:
  * <ul>
- *   <li>CLI arguments: {@code --exp 1|2|3|4|all}, {@code --config <path>}, {@code --sweep ...}, {@code --dashboard}</li>
+ *   <li>CLI arguments: {@code --exp 1|2|3|4|5|6|all}, {@code --config <path>}, {@code --sweep ...}, {@code --dashboard}</li>
  *   <li>Interactive console menu when launched without CLI flags</li>
  *   <li>Calls Person 2's {@link Experiment} interface implementations (Exp 1, 2, 3) and Exp 4</li>
  *   <li>Saves results to {@code code/results/<name>.csv} via {@link ResultWriter}</li>
@@ -80,6 +80,10 @@ public final class Main {
                     runAndPrint(new Exp3_NoisyNeighbour(), cfg);
                 } else if ("4".equals(expArg) || "mixed".equals(expArg) || "mixed_tenancy".equals(expArg)) {
                     runAndPrint(new Exp4_MixedTenancy(), cfg);
+                } else if ("5".equals(expArg) || "energy".equals(expArg)) {
+                    runAndPrint(new Exp5_Energy(), cfg);
+                } else if ("6".equals(expArg) || "latency".equals(expArg)) {
+                    runAndPrint(new Exp6_Latency(), cfg);
                 } else if ("all".equals(expArg)) {
                     runAllExperiments(cfg);
                 } else {
@@ -120,14 +124,16 @@ public final class Main {
             System.out.println("  [2] Run Experiment 2: Fleet Startup Readiness (Exp2_Startup)");
             System.out.println("  [3] Run Experiment 3: Noisy-Neighbour Slowdown (Exp3_NoisyNeighbour)");
             System.out.println("  [4] Run Experiment 4: Mixed-Tenancy Uncore Contention (Exp4_MixedTenancy)");
-            System.out.println("  [5] Run All Experiments (1 to 4) and Update Dashboard");
-            System.out.println("  [6] Run Parameter Sensitivity Sweep (SweepRunner)");
-            System.out.println("  [7] Generate Offline HTML Dashboard (DashboardGenerator)");
-            System.out.println("  [8] Run Built-in Model Verification Checks (ModelChecks)");
-            System.out.println("  [9] Reload Configuration Properties File");
+            System.out.println("  [5] Run Experiment 5: Host Energy (Exp5_Energy)");
+            System.out.println("  [6] Run Experiment 6: Request Latency (Exp6_Latency)");
+            System.out.println("  [7] Run All Experiments (1 to 6) and Update Dashboard");
+            System.out.println("  [8] Run Parameter Sensitivity Sweep (SweepRunner)");
+            System.out.println("  [9] Generate Offline HTML Dashboard (DashboardGenerator)");
+            System.out.println("  [10] Run Built-in Model Verification Checks (ModelChecks)");
+            System.out.println("  [11] Reload Configuration Properties File");
             System.out.println("  [0] Exit");
             System.out.println("================================================================================");
-            System.out.print("Select an option [0-9]: ");
+            System.out.print("Select an option [0-11]: ");
 
             String line = scanner.hasNextLine() ? scanner.nextLine().trim() : "0";
             if (line.isEmpty()) continue;
@@ -145,20 +151,24 @@ public final class Main {
                 } else if ("4".equals(line)) {
                     runAndPrint(new Exp4_MixedTenancy(), cfg);
                 } else if ("5".equals(line)) {
+                    runAndPrint(new Exp5_Energy(), cfg);
+                } else if ("6".equals(line)) {
+                    runAndPrint(new Exp6_Latency(), cfg);
+                } else if ("7".equals(line)) {
                     runAllExperiments(cfg);
                     DashboardGenerator.generate();
-                } else if ("6".equals(line)) {
-                    handleInteractiveSweep(scanner, cfg);
-                } else if ("7".equals(line)) {
-                    DashboardGenerator.generate();
                 } else if ("8".equals(line)) {
+                    handleInteractiveSweep(scanner, cfg);
+                } else if ("9".equals(line)) {
+                    DashboardGenerator.generate();
+                } else if ("10".equals(line)) {
                     System.out.println("\nRunning ModelChecks verification suite...");
                     ModelChecks.main(new String[0]);
-                } else if ("9".equals(line)) {
+                } else if ("11".equals(line)) {
                     cfg = SimConfig.load(SimConfig.DEFAULT_PROPERTIES_PATH);
                     System.out.println("Configuration reloaded from " + SimConfig.DEFAULT_PROPERTIES_PATH);
                 } else {
-                    System.out.println("Invalid option. Please enter a number between 0 and 9.");
+                    System.out.println("Invalid option. Please enter a number between 0 and 11.");
                 }
             } catch (Exception e) {
                 System.err.println("Operation failed: " + e.getMessage());
@@ -213,7 +223,9 @@ public final class Main {
         runAndPrint(new Exp2_Startup(), cfg);
         runAndPrint(new Exp3_NoisyNeighbour(), cfg);
         runAndPrint(new Exp4_MixedTenancy(), cfg);
-        System.out.println("\nAll 4 experiments completed successfully.");
+        runAndPrint(new Exp5_Energy(), cfg);
+        runAndPrint(new Exp6_Latency(), cfg);
+        System.out.println("\nAll 6 experiments completed successfully.");
     }
 
     private static void printResultPreview(ExperimentResult result, int maxRows) {
@@ -238,6 +250,8 @@ public final class Main {
             case 2: return new Exp2_Startup();
             case 3: return new Exp3_NoisyNeighbour();
             case 4: return new Exp4_MixedTenancy();
+            case 5: return new Exp5_Energy();
+            case 6: return new Exp6_Latency();
             default: throw new IllegalArgumentException("Unknown experiment number: " + num);
         }
     }
@@ -247,7 +261,7 @@ public final class Main {
         System.out.println("  java isolationstudy.Main [OPTIONS]");
         System.out.println();
         System.out.println("Options:");
-        System.out.println("  --exp <1|2|3|4|all>       Run specified experiment(s)");
+        System.out.println("  --exp <1|2|3|4|5|6|all>   Run specified experiment(s)");
         System.out.println("  --config <path>           Path to custom properties file");
         System.out.println("  --sweep <exp> <param> <min> <max> <step>   Run parameter sweep");
         System.out.println("  --dashboard               Generate self-contained HTML dashboard");
