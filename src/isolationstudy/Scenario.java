@@ -2,7 +2,9 @@ package isolationstudy;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 import org.cloudbus.cloudsim.Cloudlet;
@@ -38,7 +40,10 @@ public final class Scenario {
     private final List<IsolatedHost> hosts;
     private final VmAllocationPolicyFirstFit allocationPolicy;
     private final Random random;
+    private final PowerModel powerModel;
 
+    /** Requested arrival time per cloudlet id (0 when added without one). */
+    private final Map<Integer, Double> arrivals = new HashMap<Integer, Double>();
     private final List<IsolatedVm> vms = new ArrayList<IsolatedVm>();
     private final List<Cloudlet> cloudlets = new ArrayList<Cloudlet>();
     private boolean ran = false;
@@ -54,6 +59,7 @@ public final class Scenario {
         this.hosts = hosts;
         this.allocationPolicy = allocationPolicy;
         this.random = random;
+        this.powerModel = PowerModel.fromConfig(config);
     }
 
     // ------------------------------------------------------------------ building
@@ -85,6 +91,21 @@ public final class Scenario {
         c.setVmId(vm.getId());
         cloudlets.add(c);
         broker.submitCloudletList(Collections.singletonList(c));
+        return c;
+    }
+
+    /**
+     * Adds a cloudlet that arrives at {@code arrivalS} (simulation seconds). It starts at the later of
+     * its arrival and the moment its instance is ready, so a request that arrives before the instance
+     * has started waits, and that wait is part of its response time.
+     */
+    public Cloudlet addCloudlet(IsolatedVm vm, long lengthMi, int pes, double arrivalS) {
+        if (arrivalS < 0.0) {
+            throw new IllegalArgumentException("arrival time must be >= 0, got " + arrivalS);
+        }
+        Cloudlet c = addCloudlet(vm, lengthMi, pes);
+        arrivals.put(c.getCloudletId(), arrivalS);
+        broker.setArrivalS(c.getCloudletId(), arrivalS);
         return c;
     }
 
@@ -150,6 +171,119 @@ public final class Scenario {
         }
         return used;
     }
+
+    // ------------------------------------------------------------------ latency
+
+    private void requireRan() {
+        if (!ran) {
+            throw new IllegalStateException("call run() before reading results");
+        }
+    }
+
+    private static boolean finished(Cloudlet c) {
+        return c.getStatus() == Cloudlet.SUCCESS;
+    }
+
+    /** Requested arrival time of a cloudlet, seconds (0 when none was given). */
+    public double arrivalS(Cloudlet c) {
+        Double a = arrivals.get(c.getCloudletId());
+        return a == null ? 0.0 : a;
+    }
+
+    /** Response time of a finished cloudlet: finish time minus arrival, seconds (includes any start-up wait). */
+    public double responseTimeS(Cloudlet c) {
+        return c.getFinishTime() - arrivalS(c);
+    }
+
+    /** Response times of all finished cloudlets, in cloudlet order. Rejected instances' cloudlets never run and are skipped. */
+    public List<Double> getResponseTimesS() {
+        requireRan();
+        List<Double> out = new ArrayList<Double>();
+        for (Cloudlet c : cloudlets) {
+            if (finished(c)) {
+                out.add(responseTimeS(c));
+            }
+        }
+        return out;
+    }
+
+    public double getMeanResponseS() {
+        return LatencyStats.mean(getResponseTimesS());
+    }
+
+    /** Nearest-rank percentile of response time, {@code 0 < p <= 100} (see {@link LatencyStats}). */
+    public double getPercentileResponseS(double p) {
+        return LatencyStats.percentile(getResponseTimesS(), p);
+    }
+
+    /** Number of cloudlets that finished. */
+    public int getFinishedCount() {
+        requireRan();
+        int n = 0;
+        for (Cloudlet c : cloudlets) {
+            if (finished(c)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** Time the last cloudlet finished, seconds (0 if none finished). */
+    public double getMakespanS() {
+        requireRan();
+        double last = 0.0;
+        for (Cloudlet c : cloudlets) {
+            if (finished(c)) {
+                last = Math.max(last, c.getFinishTime());
+            }
+        }
+        return last;
+    }
+
+    // ------------------------------------------------------------------ energy
+
+    /** Hosts that received at least one instance; the others count as switched off. */
+    public int getPoweredHostCount() {
+        requireRan();
+        return allocationPolicy.getUsedHostIds().size();
+    }
+
+    /**
+     * Energy of all powered hosts from time 0 to the makespan, joules: idle power for the whole
+     * period (including start-up) plus (P_max - P_idle) times the integral of CPU utilisation.
+     */
+    public double getEnergyJ() {
+        requireRan();
+        double makespan = getMakespanS();
+        double total = 0.0;
+        for (Integer hostId : allocationPolicy.getUsedHostIds()) {
+            total += powerModel.energyJ(makespan, hosts.get(hostId).getUtilisationSeconds());
+        }
+        return total;
+    }
+
+    public double getEnergyKWh() {
+        return getEnergyJ() / 3.6e6;
+    }
+
+    /** Mean power of all powered hosts over the run, watts (0 if nothing finished). */
+    public double getAvgPowerW() {
+        double makespan = getMakespanS();
+        return makespan > 0.0 ? getEnergyJ() / makespan : 0.0;
+    }
+
+    /** Energy divided by the number of finished cloudlets, joules (NaN if none finished). */
+    public double getEnergyPerCloudletJ() {
+        int n = getFinishedCount();
+        return n > 0 ? getEnergyJ() / n : Double.NaN;
+    }
+
+    /** Energy (J) times mean response time (s): lower is better on both axes at once. */
+    public double getEnergyDelayProduct() {
+        return getEnergyJ() * getMeanResponseS();
+    }
+
+    public PowerModel getPowerModel() { return powerModel; }
 
     // ------------------------------------------------------------------ parts
 

@@ -1,6 +1,7 @@
 package isolationstudy;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,9 +34,16 @@ public class StartupBroker extends DatacenterBroker {
      * created-VM list when the run ends, and results are read afterwards.
      */
     private final Map<Integer, Vm> createdVms = new LinkedHashMap<Integer, Vm>();
+    /** Requested arrival time per cloudlet id; cloudlets without an entry arrive at time 0. */
+    private final Map<Integer, Double> arrivalS = new HashMap<Integer, Double>();
 
     public StartupBroker(String name) throws Exception {
         super(name);
+    }
+
+    /** A cloudlet is not delivered before this simulation time (it may still wait for its instance to be ready). */
+    public void setArrivalS(int cloudletId, double timeS) {
+        arrivalS.put(cloudletId, timeS);
     }
 
     /** Records each successful VM creation, then lets stock CloudSim carry on. */
@@ -100,7 +108,7 @@ public class StartupBroker extends DatacenterBroker {
         return ids;
     }
 
-    /** Same as the stock method, except each cloudlet is sent at max(now, ready time of its instance). */
+    /** Same as the stock method, except each cloudlet is sent at max(now, arrival, ready time of its instance). */
     @Override
     protected void submitCloudlets() {
         int vmIndex = 0;
@@ -116,7 +124,9 @@ public class StartupBroker extends DatacenterBroker {
                 }
             }
             cloudlet.setVmId(vm.getId());
-            double delay = Math.max(0.0, getReadyTimeS(vm) - CloudSim.clock());
+            Double arrival = arrivalS.get(cloudlet.getCloudletId());
+            double start = (arrival == null) ? getReadyTimeS(vm) : Math.max(getReadyTimeS(vm), arrival);
+            double delay = Math.max(0.0, start - CloudSim.clock());
             send(getVmsToDatacentersMap().get(vm.getId()), delay, CloudSimTags.CLOUDLET_SUBMIT, cloudlet);
             cloudletsSubmitted++;
             vmIndex = (vmIndex + 1) % getVmsCreatedList().size();

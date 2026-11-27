@@ -71,6 +71,10 @@ public class SimConfig implements Serializable {
     private final double memContentionFactor;
     private final double ioContentionFactor;
 
+    // ---- host power model for the energy results (Exp 5) ----
+    private final double hostIdlePowerW;
+    private final double hostMaxPowerW;
+
     /**
      * Internal full constructor.
      */
@@ -82,7 +86,8 @@ public class SimConfig implements Serializable {
                      int memOverheadFullVmMb, int memOverheadContainerMb, int memOverheadLightweightVmMb,
                      long seed, int[] fleetSizes, int victimCount, long victimLengthMi,
                      long neighbourLengthMi, double neighbourIntensity,
-                     double memContentionFactor, double ioContentionFactor) {
+                     double memContentionFactor, double ioContentionFactor,
+                     double hostIdlePowerW, double hostMaxPowerW) {
         this.hostCount = hostCount;
         this.hostCores = hostCores;
         this.hostMipsPerCore = hostMipsPerCore;
@@ -111,6 +116,35 @@ public class SimConfig implements Serializable {
         this.neighbourIntensity = neighbourIntensity;
         this.memContentionFactor = memContentionFactor;
         this.ioContentionFactor = ioContentionFactor;
+        if (hostIdlePowerW < 0.0 || hostMaxPowerW < hostIdlePowerW) {
+            throw new IllegalArgumentException("need 0 <= power.host.idle_w <= power.host.max_w, got "
+                    + hostIdlePowerW + " and " + hostMaxPowerW);
+        }
+        this.hostIdlePowerW = hostIdlePowerW;
+        this.hostMaxPowerW = hostMaxPowerW;
+    }
+
+    /**
+     * Constructor without power parameters (kept so existing callers still compile); uses the
+     * placeholder power defaults of {@link PowerModel}.
+     */
+    public SimConfig(int hostCount, int hostCores, double hostMipsPerCore, int hostRamMb,
+                     long hostBw, long hostStorageMb, int instanceVcpus, double instanceMipsPerVcpu,
+                     int instanceAppRamMb, long instanceBw, long instanceImageSizeMb,
+                     double startupFullVmS, double startupContainerS, double startupLightweightVmS,
+                     double cpuOverheadFullVmPct, double cpuOverheadContainerPct, double cpuOverheadLightweightVmPct,
+                     int memOverheadFullVmMb, int memOverheadContainerMb, int memOverheadLightweightVmMb,
+                     long seed, int[] fleetSizes, int victimCount, long victimLengthMi,
+                     long neighbourLengthMi, double neighbourIntensity,
+                     double memContentionFactor, double ioContentionFactor) {
+        this(hostCount, hostCores, hostMipsPerCore, hostRamMb, hostBw, hostStorageMb,
+                instanceVcpus, instanceMipsPerVcpu, instanceAppRamMb, instanceBw, instanceImageSizeMb,
+                startupFullVmS, startupContainerS, startupLightweightVmS,
+                cpuOverheadFullVmPct, cpuOverheadContainerPct, cpuOverheadLightweightVmPct,
+                memOverheadFullVmMb, memOverheadContainerMb, memOverheadLightweightVmMb,
+                seed, fleetSizes, victimCount, victimLengthMi, neighbourLengthMi, neighbourIntensity,
+                memContentionFactor, ioContentionFactor,
+                PowerModel.DEFAULT_IDLE_W, PowerModel.DEFAULT_MAX_W);
     }
 
     /**
@@ -124,7 +158,8 @@ public class SimConfig implements Serializable {
              512, 256, 768,
              42L, new int[]{1, 8, 16, 32, 64},
              4, 100000L, 1000000L, 8.0,
-             0.15, 0.20);
+             0.15, 0.20,
+             PowerModel.DEFAULT_IDLE_W, PowerModel.DEFAULT_MAX_W);
     }
 
     /**
@@ -214,13 +249,16 @@ public class SimConfig implements Serializable {
         double memContentionFactor = getDouble(p, "mixed_tenancy.mem_contention_factor", "mem_contention_factor", d.memContentionFactor);
         double ioContentionFactor = getDouble(p, "mixed_tenancy.io_contention_factor", "io_contention_factor", d.ioContentionFactor);
 
+        double hostIdlePowerW = getDouble(p, "power.host.idle_w", "power_host_idle_w", d.hostIdlePowerW);
+        double hostMaxPowerW = getDouble(p, "power.host.max_w", "power_host_max_w", d.hostMaxPowerW);
+
         return new SimConfig(hostCount, hostCores, hostMipsPerCore, hostRamMb, hostBw, hostStorageMb,
                 instanceVcpus, instanceMipsPerVcpu, instanceAppRamMb, instanceBw, instanceImageSizeMb,
                 startupFullVmS, startupContainerS, startupLightweightVmS,
                 cpuOverheadFullVmPct, cpuOverheadContainerPct, cpuOverheadLightweightVmPct,
                 memOverheadFullVmMb, memOverheadContainerMb, memOverheadLightweightVmMb,
                 seed, fleetSizes, victimCount, victimLengthMi, neighbourLengthMi, neighbourIntensity,
-                memContentionFactor, ioContentionFactor);
+                memContentionFactor, ioContentionFactor, hostIdlePowerW, hostMaxPowerW);
     }
 
     // -------------------------------------------------------------------------
@@ -267,6 +305,10 @@ public class SimConfig implements Serializable {
     public double getMemContentionFactor() { return memContentionFactor; }
     public double getIoContentionFactor() { return ioContentionFactor; }
 
+    // Host power model (energy results)
+    public double getHostIdlePowerW() { return hostIdlePowerW; }
+    public double getHostMaxPowerW() { return hostMaxPowerW; }
+
     // -------------------------------------------------------------------------
     // Sensitivity & Sweep Mutation Helpers (Non-destructive)
     // -------------------------------------------------------------------------
@@ -279,7 +321,7 @@ public class SimConfig implements Serializable {
                 cpuOverheadFullVmPct, cpuOverheadContainerPct, cpuOverheadLightweightVmPct,
                 memOverheadFullVmMb, memOverheadContainerMb, memOverheadLightweightVmMb,
                 seed, fleetSizes, victimCount, victimLengthMi, neighbourLengthMi, neighbourIntensity,
-                memContentionFactor, ioContentionFactor);
+                memContentionFactor, ioContentionFactor, hostIdlePowerW, hostMaxPowerW);
     }
 
     /** Returns a new config with scaled CPU overheads (e.g. 0.75x or 1.25x). */
@@ -292,7 +334,7 @@ public class SimConfig implements Serializable {
                 Math.min(99.0, cpuOverheadLightweightVmPct * scale),
                 memOverheadFullVmMb, memOverheadContainerMb, memOverheadLightweightVmMb,
                 seed, fleetSizes, victimCount, victimLengthMi, neighbourLengthMi, neighbourIntensity,
-                memContentionFactor, ioContentionFactor);
+                memContentionFactor, ioContentionFactor, hostIdlePowerW, hostMaxPowerW);
     }
 
     /** Returns a new config with scaled host resources (cores and RAM). */
@@ -305,7 +347,7 @@ public class SimConfig implements Serializable {
                 cpuOverheadFullVmPct, cpuOverheadContainerPct, cpuOverheadLightweightVmPct,
                 memOverheadFullVmMb, memOverheadContainerMb, memOverheadLightweightVmMb,
                 seed, fleetSizes, victimCount, victimLengthMi, neighbourLengthMi, neighbourIntensity,
-                memContentionFactor, ioContentionFactor);
+                memContentionFactor, ioContentionFactor, hostIdlePowerW, hostMaxPowerW);
     }
 
     /** Returns a new config with altered neighbour intensity. */
@@ -316,7 +358,32 @@ public class SimConfig implements Serializable {
                 cpuOverheadFullVmPct, cpuOverheadContainerPct, cpuOverheadLightweightVmPct,
                 memOverheadFullVmMb, memOverheadContainerMb, memOverheadLightweightVmMb,
                 seed, fleetSizes, victimCount, victimLengthMi, neighbourLengthMi, multiplier,
-                memContentionFactor, ioContentionFactor);
+                memContentionFactor, ioContentionFactor, hostIdlePowerW, hostMaxPowerW);
+    }
+
+    /** Returns a new config with a different number of hosts (needed when one host cannot hold all tenants). */
+    public SimConfig withHostCount(int count) {
+        if (count < 1) {
+            throw new IllegalArgumentException("host count must be >= 1, got " + count);
+        }
+        return new SimConfig(count, hostCores, hostMipsPerCore, hostRamMb, hostBw, hostStorageMb,
+                instanceVcpus, instanceMipsPerVcpu, instanceAppRamMb, instanceBw, instanceImageSizeMb,
+                startupFullVmS, startupContainerS, startupLightweightVmS,
+                cpuOverheadFullVmPct, cpuOverheadContainerPct, cpuOverheadLightweightVmPct,
+                memOverheadFullVmMb, memOverheadContainerMb, memOverheadLightweightVmMb,
+                seed, fleetSizes, victimCount, victimLengthMi, neighbourLengthMi, neighbourIntensity,
+                memContentionFactor, ioContentionFactor, hostIdlePowerW, hostMaxPowerW);
+    }
+
+    /** Returns a new config with different host idle and peak power, watts (for power sensitivity sweeps). */
+    public SimConfig withHostPower(double idleW, double maxW) {
+        return new SimConfig(hostCount, hostCores, hostMipsPerCore, hostRamMb, hostBw, hostStorageMb,
+                instanceVcpus, instanceMipsPerVcpu, instanceAppRamMb, instanceBw, instanceImageSizeMb,
+                startupFullVmS, startupContainerS, startupLightweightVmS,
+                cpuOverheadFullVmPct, cpuOverheadContainerPct, cpuOverheadLightweightVmPct,
+                memOverheadFullVmMb, memOverheadContainerMb, memOverheadLightweightVmMb,
+                seed, fleetSizes, victimCount, victimLengthMi, neighbourLengthMi, neighbourIntensity,
+                memContentionFactor, ioContentionFactor, idleW, maxW);
     }
 
     /** Returns a new config with altered host RAM. */
@@ -327,7 +394,7 @@ public class SimConfig implements Serializable {
                 cpuOverheadFullVmPct, cpuOverheadContainerPct, cpuOverheadLightweightVmPct,
                 memOverheadFullVmMb, memOverheadContainerMb, memOverheadLightweightVmMb,
                 seed, fleetSizes, victimCount, victimLengthMi, neighbourLengthMi, neighbourIntensity,
-                memContentionFactor, ioContentionFactor);
+                memContentionFactor, ioContentionFactor, hostIdlePowerW, hostMaxPowerW);
     }
 
     /** Returns a new config with altered seed. */
@@ -338,7 +405,7 @@ public class SimConfig implements Serializable {
                 cpuOverheadFullVmPct, cpuOverheadContainerPct, cpuOverheadLightweightVmPct,
                 memOverheadFullVmMb, memOverheadContainerMb, memOverheadLightweightVmMb,
                 newSeed, fleetSizes, victimCount, victimLengthMi, neighbourLengthMi, neighbourIntensity,
-                memContentionFactor, ioContentionFactor);
+                memContentionFactor, ioContentionFactor, hostIdlePowerW, hostMaxPowerW);
     }
 
     /**
@@ -388,6 +455,8 @@ public class SimConfig implements Serializable {
         p.setProperty("workload.neighbour_intensity", String.valueOf(neighbourIntensity));
         p.setProperty("mixed_tenancy.mem_contention_factor", String.valueOf(memContentionFactor));
         p.setProperty("mixed_tenancy.io_contention_factor", String.valueOf(ioContentionFactor));
+        p.setProperty("power.host.idle_w", String.valueOf(hostIdlePowerW));
+        p.setProperty("power.host.max_w", String.valueOf(hostMaxPowerW));
         return p;
     }
 

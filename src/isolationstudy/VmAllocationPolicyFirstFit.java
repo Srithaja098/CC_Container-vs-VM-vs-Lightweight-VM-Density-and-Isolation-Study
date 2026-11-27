@@ -2,8 +2,10 @@ package isolationstudy;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.cloudbus.cloudsim.Host;
 import org.cloudbus.cloudsim.Vm;
@@ -26,6 +28,8 @@ public class VmAllocationPolicyFirstFit extends VmAllocationPolicy {
     private final List<Integer> rejectedVmIds = new ArrayList<Integer>();
     /** Every instance that was ever placed. Kept after the run: CloudSim destroys all VMs at the end. */
     private final List<Integer> placedVmIds = new ArrayList<Integer>();
+    /** Ids of hosts that received at least one instance (these count as powered on). */
+    private final Set<Integer> usedHostIds = new LinkedHashSet<Integer>();
 
     public VmAllocationPolicyFirstFit(List<? extends Host> list) {
         super(list);
@@ -40,6 +44,7 @@ public class VmAllocationPolicyFirstFit extends VmAllocationPolicy {
             if (host.vmCreate(vm)) {
                 vmTable.put(vm.getUid(), host);
                 placedVmIds.add(vm.getId());
+                usedHostIds.add(host.getId());
                 return true;
             }
         }
@@ -55,6 +60,7 @@ public class VmAllocationPolicyFirstFit extends VmAllocationPolicy {
         if (host.vmCreate(vm)) {
             vmTable.put(vm.getUid(), host);
             placedVmIds.add(vm.getId());
+            usedHostIds.add(host.getId());
             return true;
         }
         rejectedVmIds.add(vm.getId());
@@ -88,6 +94,11 @@ public class VmAllocationPolicyFirstFit extends VmAllocationPolicy {
     /** Ids of instances that were placed, in placement order (still readable after the run). */
     public List<Integer> getPlacedVmIds() {
         return placedVmIds;
+    }
+
+    /** Ids of hosts that received at least one instance, in first-use order (readable after the run). */
+    public Set<Integer> getUsedHostIds() {
+        return usedHostIds;
     }
 
     /** Ids of instances that no host could take, in the order they were refused. */
