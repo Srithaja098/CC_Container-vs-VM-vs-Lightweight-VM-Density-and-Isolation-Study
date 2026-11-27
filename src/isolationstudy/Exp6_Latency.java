@@ -5,7 +5,7 @@ import java.util.Random;
 /** Compares paired request latency and energy over warm, noisy-neighbour, and cold starts. */
 public final class Exp6_Latency implements Experiment {
     private static final int INSTANCES = 8;
-    private static final int REQUESTS = 2000;
+    private static final int REQUESTS = 300;
     private static final int REPETITIONS = 5;
     private static final int[] LOAD_PCT = {20, 40, 60, 80};
     private static final String[] SCENARIOS = {"warm", "noisy", "cold"};
